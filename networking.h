@@ -8,7 +8,7 @@ typedef uint32_t in_addr_t;
 #include <arpa/inet.h>
 #endif
 
-#include "host.hpp"
+#include "host.h"
 namespace obiden {
 	class Network {
 	public:
