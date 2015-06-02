@@ -12,7 +12,7 @@
 #include <random>
 #include <chrono>
 
-#include "networking.hpp"
+#include "networking.h"
 
 namespace obiden {
 

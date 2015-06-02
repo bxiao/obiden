@@ -7,7 +7,7 @@
 #include <condition_variable>
 
 #include "packets.h"
-#include "networking.hpp"
+#include "networking.h"
 
 using std::mutex;
 using std::condition_variable;
