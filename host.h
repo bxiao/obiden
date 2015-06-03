@@ -60,7 +60,6 @@ class Host {
 	uint32_t num_hosts = 0;
 	uint32_t* hosts_next_index = nullptr;
 	uint32_t* hosts_match_index = nullptr;
-	in_addr_t* hosts_ip_address = nullptr;
 	int votes_received = 0;
 
 	uint32_t vp_hosts_max_term;
@@ -69,15 +68,14 @@ class Host {
 	uint16_t vp_hosts_responded_bits;
 	uint16_t vp_hosts_is_empty_bits;
 
+	vector<int> others_indices;
+
 public:
-	Host() {
-		num_hosts = Network::GetNumHosts();
-		hosts_ip_address = new in_addr_t[num_hosts];
-		Network::GetIpAddresses(hosts_ip_address, num_hosts);
-		auto my_ip_address = Network::GetMyIpAddress();
+	Host(int num_hosts, int self_index): num_hosts(num_hosts), self_index(self_index) {
+		others_indices.reserve(num_hosts - 1);
 		for (int i = 0; i < num_hosts; ++i) {
-			if (my_ip_address == hosts_ip_address[i]) {
-				self_index = i;
+			if (i != self_index) {
+				others_indices.push_back(i);
 			}
 		}
 	}
@@ -86,8 +84,6 @@ public:
 
 	mutex election_timeout_mutex;
 	condition_variable election_timeout_cv;
-
-	mutex 
 
 	void PresidentState();
 	void VicePresidentState();
@@ -122,7 +118,7 @@ public:
 	void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, bool is_empty);
 	void HandleRequestAppendEntries(uint8_t* raw_packet);
 	void HandleVpCombinedResponse(uint8_t* raw_packet);
-	void RoutePacket(uint8_t* packet);
+	static void RoutePacket(Host host, uint8_t* packet);
 };
 
 }

@@ -74,7 +74,7 @@ void Host::HandleRequestVoteResponse(uint8_t* raw_packet) {
 		}
 		EmptyAppendEntriesPacket packet(term, last_log_index, log[last_log_index].term,
 			commit_index, self_index, -1, 0);
-		Network::SendPacket(packet.ToNetworkOrder().ToBytes(), hosts_ip_address, num_hosts);
+		network.SendPackets(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, true);
 	}
 }
 
@@ -217,7 +217,7 @@ void Host::HandleRequestAppendEntries(uint8_t* raw_packet) {
 		EmptyAppendEntriesPacket response(term, last_log_index, log[last_log_index].term,
 			commit_index, self_index, -1, 0);
 
-		Network::SendPacket(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_index], 1);
+		Network::SendPackets(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_index], 1);
 	}
 }
 
@@ -247,37 +247,38 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
 	}
 }
 
-void Host::RoutePacket(uint8_t* packet) {
+void Host::RoutePacket(Host host, uint8_t* packet) {
 	auto opcode = ToUint16(packet + 2);
 	switch (opcode) {
 	case REQUEST_VOTE:
-		HandleRequestVote(packet);
-		return;
+		host.HandleRequestVote(packet);
+		break;
 	case REQUEST_VOTE_RESPONSE:
-		HandleRequestVoteResponse(packet);
-		return;
+		host.HandleRequestVoteResponse(packet);
+		break;
 	case APPEND_ENTRIES:
-		HandleAppendEntries(packet, false);
-		return;
+		host.HandleAppendEntries(packet, false);
+		break;
 	case EMPTY_APPEND_ENTRIES:
-		HandleAppendEntries(packet, true);
-		return;
+		host.HandleAppendEntries(packet, true);
+		break;
 	case APPEND_ENTRIES_RESPONSE:
-		HandleAppendEntriesResponse(packet, false);
-		return;
+		host.HandleAppendEntriesResponse(packet, false);
+		break;
 	case EMPTY_APPEND_ENTRIES_RESPONSE:
-		HandleAppendEntriesResponse(packet, true);
-		return;
+		host.HandleAppendEntriesResponse(packet, true);
+		break;
 	case REQUEST_APPEND_ENTRIES:
-		HandleRequestAppendEntries(packet);
-		return;
+		host.HandleRequestAppendEntries(packet);
+		break;
 	case VP_COMBINED_RESPONSE:
-		HandleVpCombinedResponse(packet);
-		return;
+		host.HandleVpCombinedResponse(packet);
+		break;
 	default:
 		// ignore packet
-		return;
+		break;
 	}
+	delete[] packet;
 }
 
 
