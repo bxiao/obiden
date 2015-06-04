@@ -49,7 +49,7 @@ class Host {
 	uint32_t term = 0;
 	uint8_t voted_for = -1;
 	Log log;
-	// volitile
+	// volatile
 	bool is_raft_mode = false;
 	uint32_t commit_index = 0;
 	uint32_t last_log_index = 0;

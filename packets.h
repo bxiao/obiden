@@ -9,6 +9,7 @@ typedef uint32_t in_addr_t;
 #endif
 
 enum Opcode : uint16_t {
+    CLIENT_DATA,
 	REQUEST_VOTE,
 	REQUEST_VOTE_RESPONSE,
 	APPEND_ENTRIES,
@@ -22,6 +23,15 @@ enum Opcode : uint16_t {
 const int SMALL_PACKET_SIZE = 24;
 const int LARGE_PACKET_SIZE = 1024;
 const int DATA_SIZE = 1000;
+
+struct ClientDataPacket {
+    uint16_t size;
+    uint16_t opcode;
+    uint32_t data;
+    uint32_t timestamp;
+    uint32_t leftover[3];
+
+};
 
 struct RequestVotePacket {
 	uint16_t size;

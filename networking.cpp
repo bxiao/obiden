@@ -24,7 +24,7 @@ namespace obiden {
  *
  */
 
-void Network::CreateListener(Network me, int portnum)
+void Network::CreateListener(Host host, int portnum)
 {   
     int sk = 0;
     struct sockaddr_in local;
@@ -51,7 +51,7 @@ void Network::CreateListener(Network me, int portnum)
     int rlen = sizeof(remote);
 
     if(getsockname(sk,(struct sockaddr*)&local,&len) < 0){
-        perror("setsockname call");
+        perror("getsockname call");
         exit(-1);
     }
     printf("socket has port %d \n", ntohs(local.sin_port));
@@ -64,51 +64,10 @@ void Network::CreateListener(Network me, int portnum)
 		messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), LARGE_PACKET_SIZE, 0,
 			(struct sockaddr*) &remote, &rlen);
         std::cout << "mesglen: " << messageLength << "\npayload: " << packet << '\n';
-		auto dispatch_thread = thread(Host::RoutePacket, me.host, packet);
+		auto dispatch_thread = thread(Host::RoutePacket, host, packet);
 	}
 
 }
-
-
-// SendPackets will send the SAME packet to each of the incides, if you want to send a
-// different packet to each of the nodes, that will need to be handled separately, or
-// we cna leverage SendOnePacket
-//void Network::SendPackets(uint8_t *payload, int payloadSize, const vector<int>& indices)
-//{
-//    for (int i = 0; i < indices.size(); i++)
-//    {
-//        NetworkInfo net_info;
-//        net_info.hostname = host_info[indices[i]].hostname;
-//        net_info.port = host_info[indices[i]].port;
-//        printf("sending packet to %s:%d\n", net_info.hostname.c_str(), net_info.port);
-//        net_info.payloadSize = payloadSize;
-//        // Malloc net_info.packet before? Not sure.  This seemed to have worked.
-//        memcpy(net_info.packet, payload, payloadSize);
-//
-//        //std::thread t1(Network::SendOnePacket, std::ref(net_info));
-//        Network::SendOnePacket(net_info);
-//    }
-//
-//}
-//
-//void Network::SendOnePacket(NetworkInfo net_info)
-//{
-//    int sk = 0;
-//    struct sockaddr_in remote;
-//    struct hostent *hp;
-//
-//    if((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0){
-//        perror("socket call");
-//        exit(-1);
-//    }
-//
-//    remote.sin_family = AF_INET;
-//    hp = gethostbyname(net_info.hostname.c_str());
-//    memcpy(&remote.sin_addr, hp->h_addr, hp->h_length);
-//    remote.sin_port = htons(net_info.port);
-//
-//    sendto(sk, reinterpret_cast<char*>(net_info.packet), net_info.payloadSize, 0, (struct sockaddr*) &remote, sizeof(remote));
-//}
 
 void Network::SendPackets(uint8_t *payload, int payload_size, const vector<int>& indices, bool to_client)
 {
