@@ -12,7 +12,7 @@ using namespace obiden;
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
-        std::cerr << "Usage: <config_file> <self_ip:port>." << std::endl;
+        std::cerr << "Usage: <config_file> <config_host_index>." << std::endl;
         return 1;
     }
     
