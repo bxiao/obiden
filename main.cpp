@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 
     Network network(hostinfo_vector, client_host);
 
-    Host host(hostinfo_vector.size(), self_index);
+    Host host(hostinfo_vector.size(), self_index, network);
 
     thread listener_thread(Network::CreateListener, host, network, 
         hostinfo_vector[self_index].port);

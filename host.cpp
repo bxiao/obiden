@@ -42,7 +42,7 @@ void Host::HandleRequestVote(uint8_t* raw_packet) {
 		uint32_t vote = (voted_for == -1 || voted_for == sender_index) &&
 			sender_log_term >= term && sender_log_index >= last_log_index;
 		RequestVoteResponsePacket response(term, vote);
-		Network::SendPacket(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_index], 1);
+		network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
 		term = sender_term;
 		if (sender_term > term) {
 			host_state = HostState::FOLLOWER;
@@ -50,7 +50,7 @@ void Host::HandleRequestVote(uint8_t* raw_packet) {
 	}
 	else {
 		RequestVoteResponsePacket response(term, 0);
-		Network::SendPacket(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_index], 1);
+		network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
 	}
 }
 
@@ -99,7 +99,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
 	if (sender_term < term ||
 		log[sender_previous_log_index].term != sender_previous_log_term) {
 		AppendEntriesResponsePacket response(term, 0, self_index);
-		Network::SendPacket(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_president_index], 1);
+		network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
 		return;
 	}
 
@@ -120,7 +120,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
 	term = sender_term;
 
 	AppendEntriesResponsePacket response(term, 1, self_index);
-	Network::SendPacket(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_president_index], 1);
+	network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
 
 	if (vice_president_index == self_index) {
 		host_state = HostState::VICE_PRESIDENT;
@@ -129,14 +129,14 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
 		vp_hosts_success_bits = 0;
 		vp_hosts_is_empty_bits = 0;
 		vp_hosts_max_term = 0;
-		std::vector<in_addr_t> host_addresses;
+		std::vector<int> host_indices;
 		for (int i = 0; i < sizeof(sender_vp_hosts_bits) * 8; ++i) {
 			uint16_t mask = 1 << i;
 			if (sender_vp_hosts_bits & mask) {
-				host_addresses.push_back(hosts_ip_address[i]);
+				host_indices.push_back(i);
 			}
 		}
-		Network::SendPacket(original_packet, host_addresses.data(), host_addresses.size());
+		network.SendPackets(original_packet, SMALL_PACKET_SIZE, host_indices);
 	}
 }
 
@@ -189,7 +189,7 @@ void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_s
 	if (vp_hosts_bits == vp_hosts_responded_bits) {
 		VpCombinedResponsePacket packet(vp_hosts_bits, vp_hosts_responded_bits,
 			vp_hosts_success_bits, vp_hosts_max_term);
-		Network::SendPacket(packet.ToNetworkOrder().ToBytes(), &hosts_ip_address[president_index], 1);
+		network.SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);
 	}
 }
 
@@ -217,7 +217,7 @@ void Host::HandleRequestAppendEntries(uint8_t* raw_packet) {
 		EmptyAppendEntriesPacket response(term, last_log_index, log[last_log_index].term,
 			commit_index, self_index, -1, 0);
 
-		Network::SendPackets(response.ToNetworkOrder().ToBytes(), &hosts_ip_address[sender_index], 1);
+		network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
 	}
 }
 

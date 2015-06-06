@@ -38,7 +38,7 @@ void Network::CreateListener(Host host, int portnum)
     //set up the socket
     local.sin_family = AF_INET;
     local.sin_addr.s_addr = htonl(INADDR_ANY);
-	local.sin_port = htons(portnum);
+    local.sin_port = htons(portnum);
 
     //bind the name (address) to a port
     if(bind(sk,(struct sockaddr*)&local, sizeof(local)) < 0){
@@ -60,49 +60,49 @@ void Network::CreateListener(Host host, int portnum)
     while (1) {
         // Wait for packets, and parse them as they come in
         // Can be 24 bytes or 1024, messageLength will be the determinant of what packet type it is
-		auto packet = new uint8_t[LARGE_PACKET_SIZE];
-		messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), LARGE_PACKET_SIZE, 0,
-			(struct sockaddr*) &remote, &rlen);
+        auto packet = new uint8_t[LARGE_PACKET_SIZE];
+        messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), LARGE_PACKET_SIZE, 0,
+            (struct sockaddr*) &remote, &rlen);
         std::cout << "mesglen: " << messageLength << "\npayload: " << packet << '\n';
-		auto dispatch_thread = thread(Host::RoutePacket, host, packet);
-	}
+        auto dispatch_thread = thread(Host::RoutePacket, host, packet);
+    }
 
 }
 
 void Network::SendPackets(uint8_t *payload, int payload_size, const vector<int>& indices, bool to_client)
 {
-	for (auto index: indices)
-	{
-		auto host_thread = thread(SendOnePacket, payload, payload_size, host_info_vector[index]);
-	}
-	if (to_client) {
-		auto client_thread = thread(SendOnePacket, payload, payload_size, client_info);
-	}
+    for (auto index: indices)
+    {
+        auto host_thread = thread(SendPacketInThread, payload, payload_size, host_info_vector[index]);
+    }
+    if (to_client) {
+        auto client_thread = thread(SendPacketInThread, payload, payload_size, client_info);
+    }
 
 }
 
-void Network::SendOnePacket(uint8_t *payload, int payload_size, HostInfo host_info)
+void Network::SendPacketInThread(uint8_t *payload, int payload_size, HostInfo host_info)
 {
-	int sk = 0;
-	struct sockaddr_in remote;
-	struct hostent *hp;
+    int sk = 0;
+    struct sockaddr_in remote;
+    struct hostent *hp;
 
-	auto packet = new char[payload_size];
-	memcpy(packet, payload, payload_size);
+    auto packet = new char[payload_size];
+    memcpy(packet, payload, payload_size);
 
-	if ((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("socket call");
-		exit(-1);
-	}
+    if ((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("socket call");
+        exit(-1);
+    }
 
-	remote.sin_family = AF_INET;
-	hp = gethostbyname(host_info.hostname.c_str());
-	memcpy(&remote.sin_addr, hp->h_addr, hp->h_length);
-	remote.sin_port = htons(host_info.port);
+    remote.sin_family = AF_INET;
+    hp = gethostbyname(host_info.hostname.c_str());
+    memcpy(&remote.sin_addr, hp->h_addr, hp->h_length);
+    remote.sin_port = htons(host_info.port);
 
-	sendto(sk, packet, payload_size, 0, reinterpret_cast<sockaddr*>(&remote), sizeof(remote));
+    sendto(sk, packet, payload_size, 0, reinterpret_cast<sockaddr*>(&remote), sizeof(remote));
 
-	delete[] packet;
+    delete[] packet;
 }
 
 }
