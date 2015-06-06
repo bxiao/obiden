@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
 
     Host host(hostinfo_vector.size(), self_index, network);
 
-    thread listener_thread(Network::CreateListener, host, network, 
+    thread listener_thread(Network::CreateListener, &host, 
         hostinfo_vector[self_index].port);
 
     // create timer thread
@@ -46,18 +46,19 @@ int main(int argc, char* argv[]) {
         switch (host.host_state) {
         case HostState::PRESIDENT:
             host.PresidentState();
-            return;
+            break;
         case HostState::VICE_PRESIDENT:
             host.VicePresidentState();
-            return;
+            break;
         case HostState::CANDIDATE:
             host.CandidateState();
-            return;
+            break;
         case HostState::FOLLOWER:
             host.FollowerState();
-            return;
+            break;
         default:
             // be super sad, something went bad.
+            break;
         }
 
     }

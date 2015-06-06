@@ -12,6 +12,8 @@
 #else
 #include <arpa/inet.h>
 #endif
+
+#include "host.h"
 #include "networking.h"
 
 using std::map;
@@ -26,7 +28,7 @@ void Host::ElectionTimer() {
         std::unique_lock<mutex> lock(election_timeout_mutex);
         auto status = election_timeout_cv.wait_for(lock, std::chrono::microseconds(timeout_ms));
         if (status == std::cv_status::timeout) {
-            host_state == HostState::CANDIDATE;
+            host_state = HostState::CANDIDATE;
 
         }
     }
@@ -159,7 +161,7 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
 
     if (host_state == HostState::PRESIDENT) {
         if (term < sender_term) {
-            host_state == HostState::FOLLOWER;
+            host_state = HostState::FOLLOWER;
             return;
         }
         else {
@@ -266,32 +268,32 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
     }
 }
 
-void Host::RoutePacket(Host host, uint8_t* packet) {
+void Host::RoutePacket(Host* host, uint8_t* packet) {
     auto opcode = ToUint16(packet + 2);
     switch (opcode) {
     case REQUEST_VOTE:
-        host.HandleRequestVote(packet);
+        host->HandleRequestVote(packet);
         break;
     case REQUEST_VOTE_RESPONSE:
-        host.HandleRequestVoteResponse(packet);
+        host->HandleRequestVoteResponse(packet);
         break;
     case APPEND_ENTRIES:
-        host.HandleAppendEntries(packet, false);
+        host->HandleAppendEntries(packet, false);
         break;
     case EMPTY_APPEND_ENTRIES:
-        host.HandleAppendEntries(packet, true);
+        host->HandleAppendEntries(packet, true);
         break;
     case APPEND_ENTRIES_RESPONSE:
-        host.HandleAppendEntriesResponse(packet, false);
+        host->HandleAppendEntriesResponse(packet, false);
         break;
     case EMPTY_APPEND_ENTRIES_RESPONSE:
-        host.HandleAppendEntriesResponse(packet, true);
+        host->HandleAppendEntriesResponse(packet, true);
         break;
     case REQUEST_APPEND_ENTRIES:
-        host.HandleRequestAppendEntries(packet);
+        host->HandleRequestAppendEntries(packet);
         break;
     case VP_COMBINED_RESPONSE:
-        host.HandleVpCombinedResponse(packet);
+        host->HandleVpCombinedResponse(packet);
         break;
     default:
         // ignore packet

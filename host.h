@@ -11,8 +11,7 @@
 
 using std::mutex;
 using std::condition_variable;
-
-#pragma pack(1)
+using std::vector;
 
 namespace obiden {
 
@@ -27,7 +26,7 @@ struct LogEntry {
     uint32_t term;
     uint32_t timestamp;
     uint32_t data;
-    LogEntry(uint32_t term, uint32_t timestamp, uint32_t data): term(term), 
+    LogEntry(uint32_t term = 0, uint32_t timestamp = 0, uint32_t data = 0): term(term), 
         timestamp(timestamp), data(data) { }
     LogEntry& ToNetworkOrder() {
         term = htonl(term);
@@ -39,6 +38,7 @@ struct LogEntry {
         term = ntohl(term);
         timestamp = ntohl(timestamp);
         data = ntohl(data);
+        return *this;
     }
 };
 
@@ -82,6 +82,7 @@ public:
             }
         }
     }
+    Host(const Host& other) = delete;
 
     HostState host_state = HostState::FOLLOWER;
 
@@ -121,7 +122,7 @@ public:
     void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, bool is_empty);
     void HandleRequestAppendEntries(uint8_t* raw_packet);
     void HandleVpCombinedResponse(uint8_t* raw_packet);
-    static void RoutePacket(Host host, uint8_t* packet);
+    static void RoutePacket(Host* host, uint8_t* packet);
 };
 
 }

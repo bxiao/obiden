@@ -24,7 +24,7 @@ namespace obiden {
  *
  */
 
-void Network::CreateListener(Host host, int portnum)
+void Network::CreateListener(Host* host, int portnum)
 {   
     int sk = 0;
     struct sockaddr_in local;
