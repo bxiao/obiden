@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
             break;
         }
 
-        // anytime the host state changes, the process_even_cv should be signaled
+        // anytime the host state changes, the event_cv should be signaled
         unique_lock<mutex> lock(Host::event_mutex);
         Host::event_cv.wait(lock);
 
