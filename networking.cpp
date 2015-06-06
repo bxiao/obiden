@@ -24,7 +24,7 @@ namespace obiden {
  *
  */
 
-void Network::CreateListener(Host* host, int portnum)
+void Network::CreateListener(int portnum)
 {   
     int sk = 0;
     struct sockaddr_in local;
@@ -64,7 +64,7 @@ void Network::CreateListener(Host* host, int portnum)
         messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), LARGE_PACKET_SIZE, 0,
             (struct sockaddr*) &remote, &rlen);
         std::cout << "mesglen: " << messageLength << "\npayload: " << packet << '\n';
-        auto dispatch_thread = thread(Host::RoutePacket, host, packet);
+        auto dispatch_thread = thread(Host::RoutePacket, packet);
     }
 
 }

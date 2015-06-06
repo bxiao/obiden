@@ -79,11 +79,13 @@
     <ClInclude Include="host.h" />
     <ClInclude Include="networking.h" />
     <ClInclude Include="packets.h" />
+    <ClInclude Include="timer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="host.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="networking.cpp" />
+    <ClCompile Include="timer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

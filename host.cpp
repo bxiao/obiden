@@ -15,27 +15,33 @@
 
 #include "host.h"
 #include "networking.h"
+#include "timer.h"
 
 using std::map;
 
 namespace obiden {
 
-void Host::ElectionTimer() {
-    std::minstd_rand rand_gen(static_cast<uint_fast32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
-    std::uniform_int_distribution<> dist(150, 300);
-    while (true) {
-        int timeout_ms = dist(rand_gen);
-        std::unique_lock<mutex> lock(election_timeout_mutex);
-        auto status = election_timeout_cv.wait_for(lock, std::chrono::microseconds(timeout_ms));
-        if (status == std::cv_status::timeout) {
-            host_state = HostState::CANDIDATE;
-
-        }
-    }
-
-}
+uint32_t Host::term = 0;
+uint8_t Host::voted_for = -1;
+bool Host::is_raft_mode = false;
+uint32_t Host::commit_index = 0;
+uint32_t Host::last_log_index = 0;
+uint32_t Host::self_index = 0;
+uint32_t Host::president_index = 0;
+uint32_t Host::vice_president_index = -1;
+uint32_t Host::num_hosts = 0;
+uint32_t* Host::hosts_next_index = nullptr;
+uint32_t* Host::hosts_match_index = nullptr;
+int Host::votes_received = 0;
+uint32_t Host::vp_hosts_max_term = 0;
+uint16_t Host::vp_hosts_bits = 0;
+uint16_t Host::vp_hosts_success_bits = 0;
+uint16_t Host::vp_hosts_responded_bits = 0;
+uint16_t Host::vp_hosts_is_empty_bits = 0;
+HostState Host::host_state = HostState::FOLLOWER;
 
 void Host::HandleRequestVote(uint8_t* raw_packet) {
+    Timer::Reset();
     auto packet = reinterpret_cast<RequestVotePacket*>(raw_packet);
     uint32_t sender_term = ntohl(packet->term);
     uint8_t sender_index = static_cast<uint8_t>(ntohl(packet->candidate_index) & 0xFF);
@@ -46,15 +52,15 @@ void Host::HandleRequestVote(uint8_t* raw_packet) {
         uint32_t vote = (voted_for == -1 || voted_for == sender_index) &&
             sender_log_term >= term && sender_log_index >= last_log_index;
         RequestVoteResponsePacket response(term, vote);
-        network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
+        Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
         term = sender_term;
         if (sender_term > term) {
-            host_state = HostState::FOLLOWER;
+            ChangeState(HostState::FOLLOWER);
         }
     }
     else {
         RequestVoteResponsePacket response(term, 0);
-        network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
+        Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
     }
 }
 
@@ -64,26 +70,26 @@ void Host::HandleRequestVoteResponse(uint8_t* raw_packet) {
     uint32_t sender_is_vote_granted = ntohl(packet->is_vote_granted);
     if (sender_term > term) {
         term = sender_term;
-        host_state = HostState::FOLLOWER;
+        ChangeState(HostState::FOLLOWER);
         return;
     }
     if (sender_is_vote_granted) {
         ++votes_received;
     }
     if (votes_received > num_hosts / 2) {
-        host_state = HostState::PRESIDENT;
+        ChangeState(HostState::PRESIDENT);
         for (int i = 0; i < num_hosts; ++i) {
             hosts_next_index[i] = last_log_index + 1;
             hosts_match_index[i] = 0;
         }
         EmptyAppendEntriesPacket packet(term, last_log_index, log[last_log_index].term,
             commit_index, self_index, -1, 0);
-        network.SendPackets(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, true);
+        Network::SendPackets(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, true);
     }
 }
 
 void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
-    host_state = HostState::FOLLOWER;
+    ChangeState(HostState::FOLLOWER);
     auto packet = reinterpret_cast<AppendEntriesPacket*>(raw_packet);
     uint8_t  sender_vp_index = packet->header.vp_index;
     static uint8_t original_packet[LARGE_PACKET_SIZE];
@@ -103,7 +109,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
     if (sender_term < term ||
         log[sender_previous_log_index].term != sender_previous_log_term) {
         AppendEntriesResponsePacket response(term, 0, self_index);
-        network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
+        Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
         return;
     }
 
@@ -124,10 +130,10 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
     term = sender_term;
 
     AppendEntriesResponsePacket response(term, 1, self_index);
-    network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
+    Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
 
     if (vice_president_index == self_index) {
-        host_state = HostState::VICE_PRESIDENT;
+        ChangeState(HostState::VICE_PRESIDENT);
         vp_hosts_bits = sender_vp_hosts_bits;
         vp_hosts_responded_bits = 0;
         vp_hosts_success_bits = 0;
@@ -140,7 +146,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
                 host_indices.push_back(i);
             }
         }
-        network.SendPackets(original_packet, SMALL_PACKET_SIZE, host_indices);
+        Network::SendPackets(original_packet, SMALL_PACKET_SIZE, host_indices);
     }
 }
 
@@ -150,18 +156,18 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
     uint32_t sender_success = ntohl(packet->success);
     uint32_t sender_index = ntohl(packet->sender_index);
 
-    if (host_state == HostState::FOLLOWER) {
+    if (CheckState() == HostState::FOLLOWER) {
         return;
     }
 
-    if (host_state == HostState::VICE_PRESIDENT) {
+    if (CheckState() == HostState::VICE_PRESIDENT) {
         VpHandleAppendEntriesResponse(sender_term, sender_success, sender_index, is_empty);
         return;
     }
 
-    if (host_state == HostState::PRESIDENT) {
+    if (CheckState() == HostState::PRESIDENT) {
         if (term < sender_term) {
-            host_state = HostState::FOLLOWER;
+            ChangeState(HostState::FOLLOWER);
             return;
         }
         else {
@@ -193,7 +199,7 @@ void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_s
     if (vp_hosts_bits == vp_hosts_responded_bits) {
         VpCombinedResponsePacket packet(vp_hosts_bits, vp_hosts_responded_bits,
             vp_hosts_success_bits, vp_hosts_max_term);
-        network.SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);
+        Network::SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);
     }
 }
 
@@ -230,7 +236,7 @@ void Host::PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t 
 
 void Host::HandleRequestAppendEntries(uint8_t* raw_packet) {
 
-    if (host_state == HostState::PRESIDENT) {
+    if (CheckState() == HostState::PRESIDENT) {
         vice_president_index = -1;
         auto packet = reinterpret_cast<RequestAppendEntriesPacket*>(raw_packet);
         uint32_t sender_index = ntohl(packet->sender_index);
@@ -238,7 +244,7 @@ void Host::HandleRequestAppendEntries(uint8_t* raw_packet) {
         EmptyAppendEntriesPacket response(term, last_log_index, log[last_log_index].term,
             commit_index, self_index, -1, 0);
 
-        network.SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
+        Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
     }
 }
 
@@ -253,7 +259,7 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
 
     if (term < sender_max_term) {
         term = sender_max_term;
-        host_state = HostState::FOLLOWER;
+        ChangeState(HostState::FOLLOWER);
         return;
     }
     else {
@@ -268,32 +274,32 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
     }
 }
 
-void Host::RoutePacket(Host* host, uint8_t* packet) {
+void Host::RoutePacket(uint8_t* packet) {
     auto opcode = ToUint16(packet + 2);
     switch (opcode) {
     case REQUEST_VOTE:
-        host->HandleRequestVote(packet);
+        HandleRequestVote(packet);
         break;
     case REQUEST_VOTE_RESPONSE:
-        host->HandleRequestVoteResponse(packet);
+        HandleRequestVoteResponse(packet);
         break;
     case APPEND_ENTRIES:
-        host->HandleAppendEntries(packet, false);
+        HandleAppendEntries(packet, false);
         break;
     case EMPTY_APPEND_ENTRIES:
-        host->HandleAppendEntries(packet, true);
+        HandleAppendEntries(packet, true);
         break;
     case APPEND_ENTRIES_RESPONSE:
-        host->HandleAppendEntriesResponse(packet, false);
+        HandleAppendEntriesResponse(packet, false);
         break;
     case EMPTY_APPEND_ENTRIES_RESPONSE:
-        host->HandleAppendEntriesResponse(packet, true);
+        HandleAppendEntriesResponse(packet, true);
         break;
     case REQUEST_APPEND_ENTRIES:
-        host->HandleRequestAppendEntries(packet);
+        HandleRequestAppendEntries(packet);
         break;
     case VP_COMBINED_RESPONSE:
-        host->HandleVpCombinedResponse(packet);
+        HandleVpCombinedResponse(packet);
         break;
     default:
         // ignore packet
@@ -310,7 +316,7 @@ void Host::PresidentState() {
     
     auto log_size = log.size();
     bool need_to_send_heartbeat = true;
-    while (true) {
+    while (CheckState() == HostState::PRESIDENT) {
         map<int, vector<int>> index_map;
         size_t max_group = 0;
         for (int i = 0; i < num_hosts; ++i) {

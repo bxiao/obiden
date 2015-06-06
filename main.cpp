@@ -1,8 +1,11 @@
-#include "host.h"
 #include <thread>
 #include <iostream>
 #include <fstream>
 #include <string>
+
+#include "host.h"
+#include "networking.h"
+#include "timer.h"
 
 using std::thread;
 using std::ifstream;
@@ -33,33 +36,34 @@ int main(int argc, char* argv[]) {
     auto client_host = hostinfo_vector.back();
     hostinfo_vector.pop_back();
 
-    Network network(hostinfo_vector, client_host);
+    Network::Init(hostinfo_vector, client_host);
+    Host::Init(hostinfo_vector.size(), self_index);
 
-    Host host(hostinfo_vector.size(), self_index, network);
-
-    thread listener_thread(Network::CreateListener, &host, 
-        hostinfo_vector[self_index].port);
-
-    // create timer thread
+    auto listener_thread = thread(Network::CreateListener, hostinfo_vector[self_index].port);
+    auto timer_thread = thread(Timer::Run);
 
     while (true) {
-        switch (host.host_state) {
+        switch (Host::host_state) {
         case HostState::PRESIDENT:
-            host.PresidentState();
+            Host::PresidentState();
             break;
         case HostState::VICE_PRESIDENT:
-            host.VicePresidentState();
+            Host::VicePresidentState();
             break;
         case HostState::CANDIDATE:
-            host.CandidateState();
+            Host::CandidateState();
             break;
         case HostState::FOLLOWER:
-            host.FollowerState();
+            Host::FollowerState();
             break;
         default:
             // be super sad, something went bad.
             break;
         }
+
+        // anytime the host state changes, the process_even_cv should be signaled
+        unique_lock<mutex> lock(Host::event_mutex);
+        Host::event_cv.wait(lock);
 
     }
 

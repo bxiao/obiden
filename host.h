@@ -8,10 +8,12 @@
 
 #include "packets.h"
 #include "networking.h"
+#include "timer.h"
 
 using std::mutex;
 using std::condition_variable;
 using std::vector;
+using std::unique_lock;
 
 namespace obiden {
 
@@ -46,35 +48,40 @@ typedef std::vector<LogEntry> Log;
 
 class Host {
     // persistent
-    uint32_t term = 0;
-    uint8_t voted_for = -1;
-    Log log;
+    static uint32_t term;
+    static uint8_t voted_for;
+    static Log log;
     // volatile
-    bool is_raft_mode = false;
-    uint32_t commit_index = 0;
-    uint32_t last_log_index = 0;
-    uint32_t self_index = 0;
-    uint32_t president_index = 0;
-    uint32_t vice_president_index;
+    static bool is_raft_mode;
+    static uint32_t commit_index;
+    static uint32_t last_log_index;
+    static uint32_t self_index;
+    static uint32_t president_index;
+    static uint32_t vice_president_index;
 
-    uint32_t num_hosts = 0;
-    uint32_t* hosts_next_index = nullptr;
-    uint32_t* hosts_match_index = nullptr;
-    int votes_received = 0;
+    static uint32_t num_hosts;
+    static uint32_t* hosts_next_index;
+    static uint32_t* hosts_match_index;
+    static int votes_received;
 
-    uint32_t vp_hosts_max_term;
-    uint16_t vp_hosts_bits;
-    uint16_t vp_hosts_success_bits;
-    uint16_t vp_hosts_responded_bits;
-    uint16_t vp_hosts_is_empty_bits;
+    static uint32_t vp_hosts_max_term;
+    static uint16_t vp_hosts_bits;
+    static uint16_t vp_hosts_success_bits;
+    static uint16_t vp_hosts_responded_bits;
+    static uint16_t vp_hosts_is_empty_bits;
 
-    vector<int> others_indices;
-
-    Network network;
+    static vector<int> others_indices;
 
 public:
-    Host(int num_hosts, int self_index, Network network): num_hosts(num_hosts), 
-            self_index(self_index), network(network) {
+
+    static HostState host_state;
+    static mutex event_mutex;
+    static condition_variable event_cv;
+
+    static void Init(int num_hosts, int self_index) {
+        Host::num_hosts = num_hosts;
+        Host::self_index = self_index;
+
         others_indices.reserve(num_hosts - 1);
         for (int i = 0; i < num_hosts; ++i) {
             if (i != self_index) {
@@ -82,19 +89,22 @@ public:
             }
         }
     }
-    Host(const Host& other) = delete;
 
-    HostState host_state = HostState::FOLLOWER;
+    static void ChangeState(HostState host_state) {
+        unique_lock<mutex> lock(event_mutex);
+        Host::host_state = host_state;
+        event_cv.notify_one();
+    }
 
-    mutex election_timeout_mutex;
-    condition_variable election_timeout_cv;
+    static HostState CheckState() {
+        unique_lock<mutex> lock(event_mutex);
+        return host_state;
+    }
 
-    void PresidentState();
-    void VicePresidentState();
-    void CandidateState();
-    void FollowerState();
-
-    void ElectionTimer();
+    static void PresidentState();
+    static void VicePresidentState();
+    static void CandidateState();
+    static void FollowerState();
 
     static uint16_t ToUint16(uint8_t* data) {
         return (data[0] << 8) | data[1];
@@ -113,16 +123,16 @@ public:
         data[3] = static_cast<uint8_t>((value)& 0xFF);
     }
 
-    void HandleRequestVote(uint8_t* raw_packet);
-    void HandleRequestVoteResponse(uint8_t* raw_packet);
-    void HandleAppendEntries(uint8_t* raw_packet, bool is_empty);
-    void HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty);
-    void VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
+    static void HandleRequestVote(uint8_t* raw_packet);
+    static void HandleRequestVoteResponse(uint8_t* raw_packet);
+    static void HandleAppendEntries(uint8_t* raw_packet, bool is_empty);
+    static void HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty);
+    static void VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
         uint32_t follower_index, bool follower_is_empty);
-    void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, bool is_empty);
-    void HandleRequestAppendEntries(uint8_t* raw_packet);
-    void HandleVpCombinedResponse(uint8_t* raw_packet);
-    static void RoutePacket(Host* host, uint8_t* packet);
+    static void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, bool is_empty);
+    static void HandleRequestAppendEntries(uint8_t* raw_packet);
+    static void HandleVpCombinedResponse(uint8_t* raw_packet);
+    static void RoutePacket(uint8_t* packet);
 };
 
 }

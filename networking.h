@@ -27,25 +27,24 @@ struct HostInfo {
     int port;
 };
 
-
-class Host;
-
 class Network {
     private:
-        vector<HostInfo> host_info_vector;
-        HostInfo client_info;
+        static vector<HostInfo> host_info_vector;
+        static HostInfo client_info;
         static void SendPacketInThread(uint8_t* payload, int payload_size, HostInfo host_info);
     public:
-        Network(vector<HostInfo> host_info_vector, HostInfo client_info) : 
-            host_info_vector(host_info_vector), client_info(client_info) {}
+        static void Init(const vector<HostInfo>& host_info_vector, const HostInfo& client_info) {
+            Network::host_info_vector = host_info_vector;
+            Network::client_info = client_info;
+        }
 
         // Send to hosts (may or may not be single)
         // Create thread per num_ip_addresses
-        void SendPacket(uint8_t* payload, int payload_size, int index) {
+        static void SendPacket(uint8_t* payload, int payload_size, int index) {
             SendPackets(payload, payload_size, vector<int>{index}, false);
         }
-        void SendPackets(uint8_t* payload, int payload_size, const vector<int>& indices,
+        static void SendPackets(uint8_t* payload, int payload_size, const vector<int>& indices,
             bool to_client = false);
-        static void CreateListener(Host* host, int portnum);
+        static void CreateListener(int portnum);
 };
 }
