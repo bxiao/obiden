@@ -57,7 +57,7 @@ void Network::CreateListener(int portnum)
     printf("socket has port %d \n", ntohs(local.sin_port));
 
     // Wait for connection
-    while (1) {
+    while (true) {
         // Wait for packets, and parse them as they come in
         // Can be 24 bytes or 1024, messageLength will be the determinant of what packet type it is
         auto packet = new uint8_t[LARGE_PACKET_SIZE];

@@ -43,6 +43,11 @@ int main(int argc, char* argv[]) {
     auto timer_thread = thread(Timer::Run);
 
     while (true) {
+
+		// anytime the host state changes, the event_cv should be signaled
+		unique_lock<mutex> lock(Host::event_mutex);
+		Host::event_cv.wait(lock);
+
         switch (Host::host_state) {
         case HostState::PRESIDENT:
             Host::PresidentState();
@@ -60,11 +65,6 @@ int main(int argc, char* argv[]) {
             // be super sad, something went bad.
             break;
         }
-
-        // anytime the host state changes, the event_cv should be signaled
-        unique_lock<mutex> lock(Host::event_mutex);
-        Host::event_cv.wait(lock);
-
     }
 
     return 0;

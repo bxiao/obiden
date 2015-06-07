@@ -6,12 +6,15 @@
 #include <chrono>
 #include <random>
 
+#include "host.h"
+
 using std::thread;
 using std::mutex;
 using std::condition_variable;
 using std::unique_lock;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
+using std::chrono::system_clock;
 
 namespace obiden {
 
@@ -27,10 +30,12 @@ public:
     };
 
     static WaitTime wait_time;
+	static system_clock::duration vp_start_time;
+	static system_clock::duration vp_elapsed_time;
 
     static void Run();
     static void Reset();
-    static void Change(WaitTime wait_time);
+    static void ChangeState(HostState host_state);
 };
 
 }

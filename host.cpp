@@ -108,7 +108,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
 
     if (sender_term < term ||
         log[sender_previous_log_index].term != sender_previous_log_term) {
-        AppendEntriesResponsePacket response(term, 0, self_index);
+        AppendEntriesResponsePacket response(term, 0, self_index, 0);
         Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
         return;
     }
@@ -129,7 +129,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
 
     term = sender_term;
 
-    AppendEntriesResponsePacket response(term, 1, self_index);
+    AppendEntriesResponsePacket response(term, 1, self_index, sender_log_index);
     Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
 
     if (vice_president_index == self_index) {
@@ -155,13 +155,14 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
     uint32_t sender_term = ntohl(packet->term);
     uint32_t sender_success = ntohl(packet->success);
     uint32_t sender_index = ntohl(packet->sender_index);
+	uint32_t sender_log_index = ntohl(packet->log_index);
 
     if (CheckState() == HostState::FOLLOWER) {
         return;
     }
 
     if (CheckState() == HostState::VICE_PRESIDENT) {
-        VpHandleAppendEntriesResponse(sender_term, sender_success, sender_index, is_empty);
+        VpHandleAppendEntriesResponse(sender_term, sender_success, sender_index, is_empty, sender_log_index);
         return;
     }
 
@@ -171,43 +172,39 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
             return;
         }
         else {
-            PresidentHandleAppendEntriesResponse(sender_success, sender_index, is_empty);
+            PresidentHandleAppendEntriesResponse(sender_success, sender_index, is_empty,
+				sender_log_index);
         }
     }
 }
 
 void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
-    uint32_t follower_index, bool follower_is_empty) {
-    if (follower_term > vp_hosts_max_term) {
+    uint32_t follower_index, bool follower_is_empty, uint32_t follower_log_index) {
+    
+	if (follower_term > vp_hosts_max_term) {
         vp_hosts_max_term = follower_term;
     }
-    uint16_t mask = 1 << follower_index;
-    vp_hosts_responded_bits |= mask;
-    if (follower_success) {
-        vp_hosts_success_bits |= mask;
-    }
-    else {
-        vp_hosts_success_bits &= ~mask;
-    }
-    if (follower_is_empty) {
-        vp_hosts_is_empty_bits |= mask;
-    }
-    else {
-        vp_hosts_is_empty_bits &= ~mask;
-    }
-
-    if (vp_hosts_bits == vp_hosts_responded_bits) {
-        VpCombinedResponsePacket packet(vp_hosts_bits, vp_hosts_responded_bits,
-            vp_hosts_success_bits, vp_hosts_max_term);
-        Network::SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);
-    }
+	if (follower_log_index > vp_max_log_index) {
+		vp_max_log_index = follower_log_index;
+	}
+	vp_hosts_isempty_vector[follower_index] = follower_is_empty;
+	vp_hosts_log_index_vector[follower_index] = follower_log_index;
+	vp_hosts_success_vector[follower_index] = follower_success;
+	vp_hosts_responded_vector[follower_index] = true;
+	vp_hosts_responded_bits |= 1 << follower_index;
+	if (vp_hosts_bits == vp_hosts_responded_bits) {
+		auto lock = unique_lock<mutex>(event_mutex);
+		event_cv.notify_one();
+	}
+        
 }
 
-void Host::PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, bool is_empty) {
+void Host::PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index,
+	bool is_empty, uint32_t log_entry) {
     if (follower_success) {
         if (!is_empty) {
-            ++hosts_next_index[follower_index];
-            hosts_match_index[follower_index] = hosts_next_index[follower_index];
+			hosts_next_index[follower_index] = log_entry;
+			hosts_match_index[follower_index] = log_entry;
         }
     }
     else {
@@ -256,6 +253,7 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
     uint16_t sender_vp_hosts_success_bits = ntohs(packet->vp_hosts_success_bits);
     uint16_t sender_vp_hosts_is_empty_bits = ntohs(packet->vp_hosts_is_empty_bits);
     uint32_t sender_max_term = ntohl(packet->max_term);
+	uint32_t sender_max_log_index = ntohl(packet->max_log_index);
 
     if (term < sender_max_term) {
         term = sender_max_term;
@@ -268,7 +266,7 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
             if (sender_vp_hosts_responded_bits & mask) {
                 bool success = (sender_vp_hosts_success_bits & mask) != 0;
                 bool is_empty = (sender_vp_hosts_is_empty_bits & mask) != 0;
-                PresidentHandleAppendEntriesResponse(success, i, is_empty);
+                PresidentHandleAppendEntriesResponse(success, i, is_empty, sender_max_log_index);
             }
         }
     }
@@ -319,6 +317,7 @@ void Host::PresidentState() {
     while (CheckState() == HostState::PRESIDENT) {
         map<int, vector<int>> index_map;
         size_t max_group = 0;
+		//int max_next_index = -1;
         for (int i = 0; i < num_hosts; ++i) {
             if (hosts_next_index[i] < log_size) {
                 if (index_map.count(hosts_next_index[i]) == 0) {
@@ -329,6 +328,7 @@ void Host::PresidentState() {
                 }
                 if (index_map[hosts_next_index[i]].size() > max_group) {
                     max_group = index_map[hosts_next_index[i]].size();
+					//max_next_index = hosts_next_index[i];
                 }
             }
         }
@@ -342,7 +342,7 @@ void Host::PresidentState() {
 
         bool found_vp = max_group < 3; // if group less than two don't find a vp
         for (auto& group : index_map) {
-            int vp_index = 1;
+            int vp_index = -1;
             uint16_t vp_host_bits = 0;
             if (!found_vp && group.second.size() == max_group) {
                 vp_index = group.second[0];
@@ -352,9 +352,77 @@ void Host::PresidentState() {
             }
             auto packet = AppendEntriesPacket(term, log_size - 1, log[log_size - 1].term,
                 commit_index, self_index, vp_index, vp_host_bits);
+			Network::SendPackets(packet.ToNetworkOrder().ToBytes(), LARGE_PACKET_SIZE, group.second, false);
         }
     }
 
+	EmptyAppendEntriesPacket packet(term, log_size - 1, log[log_size - 1].term,
+		commit_index, self_index, -1, 0);
+	Network::SendPackets(packet.ToNetworkOrder().ToBytes(), LARGE_PACKET_SIZE, others_indices, false);
+
+}
+
+void Host::CandidateState() {
+
+	++term;
+	voted_for = self_index;
+	votes_received = 1;
+	RequestVotePacket request_vote(term, self_index, last_log_index, log[last_log_index].term);
+
+	Network::SendPackets(request_vote.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, false);
+
+}
+
+void Host::FollowerState() {
+	if (append_entry_request_sent) {
+		ChangeState(HostState::CANDIDATE);
+	}
+	else {
+		append_entry_request_sent = true;
+		RequestAppendEntriesPacket packet(self_index);
+		Network::SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);
+	}
+}
+
+void Host::VicePresidentState() {
+	for (int i = 0; i < num_hosts; ++i) {
+		if (vp_hosts_responded_vector[i] && vp_hosts_log_index_vector[i] == vp_max_log_index) {
+			uint16_t mask = 1 << i;
+
+			vp_hosts_responded_bits |= mask;
+			if (vp_hosts_success_vector[i]) {
+				vp_hosts_success_bits |= mask;
+			}
+			else {
+				vp_hosts_success_bits &= ~mask;
+			}
+			if (vp_hosts_isempty_vector[i]) {
+				vp_hosts_is_empty_bits |= mask;
+			}
+			else {
+				vp_hosts_is_empty_bits &= ~mask;
+			}
+		}
+	}
+
+	VpCombinedResponsePacket packet(vp_hosts_bits, vp_hosts_responded_bits,
+		vp_hosts_success_bits, vp_hosts_max_term, vp_max_log_index);
+	Network::SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);
+
+	ChangeState(HostState::FOLLOWER);
+
+	vp_hosts_responded_bits = 0;
+	vp_hosts_success_bits = 0;
+	vp_hosts_is_empty_bits = 0;
+	vp_hosts_max_term = 0;
+	vp_max_log_index = 0;
+	for (int i = 0; i < num_hosts; ++i) {
+		vp_hosts_isempty_vector[i] = false;
+		vp_hosts_log_index_vector[i] = 0;
+		vp_hosts_responded_vector[i] = false;
+		vp_hosts_success_vector[i] = false;
+	}
+	
 
 }
 

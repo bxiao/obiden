@@ -138,15 +138,18 @@ struct AppendEntriesResponsePacket {
     uint32_t term;
     uint32_t success;
     uint32_t sender_index;
-    uint32_t leftover[2];
-    AppendEntriesResponsePacket(uint32_t term, uint32_t success, uint32_t sender_index) : size(SMALL_PACKET_SIZE),
-        opcode(Opcode::APPEND_ENTRIES_RESPONSE), term(term), success(success), sender_index(sender_index) {}
+	uint32_t log_index;
+    uint32_t leftover;
+    AppendEntriesResponsePacket(uint32_t term, uint32_t success, uint32_t sender_index,
+		uint32_t log_index) : size(SMALL_PACKET_SIZE), opcode(Opcode::APPEND_ENTRIES_RESPONSE),
+		term(term), success(success), sender_index(sender_index), log_index(log_index) {}
     AppendEntriesResponsePacket & ToNetworkOrder() {
         size = htons(size);
         opcode = htons(opcode);
         term = htonl(term);
         success = htonl(success);
         sender_index = htonl(sender_index);
+		log_index = htonl(log_index);
         return *this;
     }
     uint8_t* ToBytes() {
@@ -204,13 +207,14 @@ struct VpCombinedResponsePacket {
     // since the term is only used to tell if the president has been ousted
     // we just need the highest term from any host
     uint32_t max_term;
-    uint16_t leftover[5];
+	uint32_t max_log_index;
+    uint16_t leftover[3];
     VpCombinedResponsePacket(uint16_t vp_hosts_bits, uint16_t vp_hosts_responded_bits,
-        uint16_t vp_hosts_success_bits, uint32_t max_term) : size(SMALL_PACKET_SIZE),
+        uint16_t vp_hosts_success_bits, uint32_t max_term, uint32_t max_log_index) : size(SMALL_PACKET_SIZE),
         opcode(Opcode::VP_COMBINED_RESPONSE), vp_hosts_bits(vp_hosts_bits),
         vp_hosts_responded_bits(vp_hosts_responded_bits),
         vp_hosts_success_bits(vp_hosts_success_bits),
-        max_term(max_term) {}
+        max_term(max_term), max_log_index(max_log_index) {}
     VpCombinedResponsePacket& ToNetworkOrder() {
         size = htons(size);
         opcode = htons(opcode);

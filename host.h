@@ -71,6 +71,14 @@ class Host {
     static uint16_t vp_hosts_is_empty_bits;
 
     static vector<int> others_indices;
+	static bool append_entry_request_sent;
+
+	static uint32_t vp_max_log_index;
+	static vector<uint32_t> vp_hosts_log_index_vector;
+	static vector<uint32_t> vp_hosts_term_vector;
+	static vector<bool> vp_hosts_success_vector;
+	static vector<bool> vp_hosts_responded_vector;
+	static vector<bool> vp_hosts_isempty_vector;
 
 public:
 
@@ -88,6 +96,13 @@ public:
                 others_indices.push_back(i);
             }
         }
+
+		hosts_next_index = new uint32_t[num_hosts];
+		hosts_match_index = new uint32_t[num_hosts];
+
+		vp_hosts_log_index_vector.resize(num_hosts);
+
+
     }
 
     static void ChangeState(HostState host_state) {
@@ -128,8 +143,9 @@ public:
     static void HandleAppendEntries(uint8_t* raw_packet, bool is_empty);
     static void HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty);
     static void VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
-        uint32_t follower_index, bool follower_is_empty);
-    static void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, bool is_empty);
+		uint32_t follower_index, bool follower_is_empty, uint32_t follower_log_index);
+    static void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, 
+		bool is_empty, uint32_t log_entry);
     static void HandleRequestAppendEntries(uint8_t* raw_packet);
     static void HandleVpCombinedResponse(uint8_t* raw_packet);
     static void RoutePacket(uint8_t* packet);
