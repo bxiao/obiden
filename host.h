@@ -6,6 +6,13 @@
 #include <mutex>
 #include <condition_variable>
 
+enum class HostState {
+	FOLLOWER,
+	CANDIDATE,
+	VICE_PRESIDENT,
+	PRESIDENT
+};
+
 #include "packets.h"
 #include "networking.h"
 #include "timer.h"
@@ -17,12 +24,7 @@ using std::unique_lock;
 
 namespace obiden {
 
-enum class HostState {
-    FOLLOWER,
-    CANDIDATE,
-    VICE_PRESIDENT,
-    PRESIDENT
-};
+
 
 struct LogEntry {
     uint32_t term;

@@ -12,6 +12,7 @@ typedef uint32_t in_addr_t;
 
 enum Opcode : uint16_t {
     CLIENT_DATA,
+	COMMIT_TO_CLIENT,
     REQUEST_VOTE,
     REQUEST_VOTE_RESPONSE,
     APPEND_ENTRIES,
@@ -32,6 +33,25 @@ struct ClientDataPacket {
     uint32_t data;
     uint32_t timestamp;
     uint32_t leftover[3];
+	ClientDataPacket(uint32_t data, uint32_t timestamp) : size(SMALL_PACKET_SIZE),
+		opcode(CLIENT_DATA), data(data), timestamp(timestamp) { }
+	ClientDataPacket& ToNetworkOrder() {
+		size = htons(size);
+		opcode = htons(opcode);
+		data = htons(data);
+		timestamp = htons(timestamp);
+		return *this;
+	}
+	uint8_t* ToBytes() {
+		return reinterpret_cast<uint8_t*>(this);
+	}
+};
+
+struct CommitToClientPacket {
+	uint16_t size;
+	uint16_t opcode;
+	uint32_t index;
+	uint32_t leftover[4];
 
 };
 

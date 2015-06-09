@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "obiden", "obiden.vcxproj", "{C18DCD6A-8992-4DB5-8DC0-A7FB034EB4B7}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "contition_variable_timer_test", "contition_variable_timer_test\contition_variable_timer_test.vcxproj", "{93A1F394-0620-4548-A621-901DDA1E9909}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "client", "client\client.vcxproj", "{10F4B86E-ABC1-4C4F-A133-76C00E12157F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{93A1F394-0620-4548-A621-901DDA1E9909}.Debug|Win32.Build.0 = Debug|Win32
 		{93A1F394-0620-4548-A621-901DDA1E9909}.Release|Win32.ActiveCfg = Release|Win32
 		{93A1F394-0620-4548-A621-901DDA1E9909}.Release|Win32.Build.0 = Release|Win32
+		{10F4B86E-ABC1-4C4F-A133-76C00E12157F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{10F4B86E-ABC1-4C4F-A133-76C00E12157F}.Debug|Win32.Build.0 = Debug|Win32
+		{10F4B86E-ABC1-4C4F-A133-76C00E12157F}.Release|Win32.ActiveCfg = Release|Win32
+		{10F4B86E-ABC1-4C4F-A133-76C00E12157F}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

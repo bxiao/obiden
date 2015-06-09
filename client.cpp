@@ -1,16 +1,70 @@
 #pragma once
 
+#ifdef WIN32
+#include <Winsock2.h>
+#else
+#include <arpa/inet.h>
+#endif
+
+#include <cstdio>
+#include <cstdint>
+#include <iostream>
+#include <vector>
+#include <thread>
+
+#include "networking.h"
+#include "packets.h"
+
 using namespace std;
+using namespace obiden;
 
 // CLIENT ONLY
 int presidentIndex = 0;
+vector<HostInfo> host_info_vector;
+uint32_t data = 1;
 
+void SendPacketInThread(uint8_t *payload, int payload_size)
+{
+	int sk = 0;
+	struct sockaddr_in remote;
+	struct hostent *hp;
 
-void createListener(int portnum)
+	auto packet = new char[payload_size];
+	memcpy(packet, payload, payload_size);
+
+	if ((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("socket call");
+		exit(-1);
+	}
+
+	remote.sin_family = AF_INET;
+	hp = gethostbyname(host_info_vector[presidentIndex].hostname.c_str());
+	memcpy(&remote.sin_addr, hp->h_addr, hp->h_length);
+	remote.sin_port = htons(host_info_vector[presidentIndex].port);
+
+	sendto(sk, packet, payload_size, 0, reinterpret_cast<sockaddr*>(&remote), sizeof(remote));
+
+	delete[] packet;
+}
+
+void SendPackets(uint8_t *payload, int payload_size, const vector<int>& indices, bool to_client)
+{
+	for (auto index : indices)
+	{
+		auto host_thread = thread(SendPacketInThread, payload, payload_size, host_info_vector[index]);
+	}
+	if (to_client) {
+		auto client_thread = thread(SendPacketInThread, payload, payload_size, client_info);
+	}
+}
+
+void createListener(int portnum, vector<HostInfo> host_info_in)
 {
     int sk = 0;
     struct sockaddr_in local;
     int len = sizeof(local);
+
+	host_info_vector = host_info_in;
 
     // Create listener socket and process packets here
     if((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0){
@@ -38,63 +92,39 @@ void createListener(int portnum)
     }
     printf("socket has port %d \n", ntohs(local.sin_port));
 
+	uint8_t packet[SMALL_PACKET_SIZE];
+
     // Wait for connection
     while (true) {
         // Wait for packets, and parse them as they come in
         // Can be 24 bytes or 1024, messageLength will be the determinant of what packet type it is
-        auto packet = new uint8_t[LARGE_PACKET_SIZE];
-        messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), LARGE_PACKET_SIZE, 0,
+        
+        messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), SMALL_PACKET_SIZE, 0,
             (struct sockaddr*) &remote, &rlen);
         std::cout << "mesglen: " << messageLength << "\npayload: " << packet << '\n';
 
-        if (messageLength == sizeof(AppendEntriesPacket)) {
-            presidentIndex = (AppendEntriesPacket)packet.header.president_index;
-            sendPacketInThread(payload, payload_size, host_info_vector[presidentIndex]);
-        }
-        if (messageLength == sizeof(__packet__)) {
+		auto opcode = ntohl(*reinterpret_cast<uint16_t*>(packet + 2));
+
+        if (opcode == Opcode::EMPTY_APPEND_ENTRIES) {
+            presidentIndex = ntohl(reinterpret_cast<AppendEntriesPacket*>(packet)->header.president_index);
+		}
+		else if (opcode == Opcode::COMMIT_TO_CLIENT) {
+			++data;
             time_t timestamp;
             struct tm* tm_info = localtime(&timestamp);
 
             strftime(buffer, 25, "%H:%M:%S", tm_info);
             cout "time: " << buffer << " go back to listen\n";
+			sendPacketInThread(packet, LARGE_PACKET_SIZE, host_info_vector[presidentIndex]);
         }
+		
     }
 }
 
-void sendPackets(uint8_t *payload, int payload_size, const vector<int>& indices, bool to_client)
-{
-    for (auto index: indices)
-    {
-        auto host_thread = thread(SendPacketInThread, payload, payload_size, host_info_vector[index]);
-    }
-    if (to_client) {
-        auto client_thread = thread(SendPacketInThread, payload, payload_size, client_info);
-    }
-}
 
-void sendPacketInThread(uint8_t *payload, int payload_size, HostInfo host_info)
-{
-    int sk = 0;
-    struct sockaddr_in remote;
-    struct hostent *hp;
 
-    auto packet = new char[payload_size];
-    memcpy(packet, payload, payload_size);
 
-    if ((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("socket call");
-        exit(-1);
-    }
 
-    remote.sin_family = AF_INET;
-    hp = gethostbyname(host_info.hostname.c_str());
-    memcpy(&remote.sin_addr, hp->h_addr, hp->h_length);
-    remote.sin_port = htons(host_info.port);
-
-    sendto(sk, packet, payload_size, 0, reinterpret_cast<sockaddr*>(&remote), sizeof(remote));
-
-    delete[] packet;
-}
 
 // Send an initial message and then wait to hear back from the leader.
     // Why send initial message?
