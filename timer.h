@@ -26,12 +26,12 @@ public:
     enum WaitTime {
         ELECTION_RANDOM = -1,
         HEARTBEAT = 100,
-        VICE_PRESIDENT = 50
+        VICE_PRESIDENT = 50,
     };
 
     static WaitTime wait_time;
-	static system_clock::duration vp_start_time;
-	static system_clock::duration vp_elapsed_time;
+    static system_clock::duration vp_start_time;
+    static system_clock::duration vp_elapsed_time;
 
     static void Run();
     static void Reset();
