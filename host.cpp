@@ -23,7 +23,6 @@ namespace obiden {
 
 uint32_t Host::term = 0;
 uint8_t Host::voted_for = -1;
-bool Host::is_raft_mode = false;
 uint32_t Host::commit_index = 0;
 uint32_t Host::last_log_index = 0;
 uint32_t Host::self_index = 0;
@@ -40,6 +39,16 @@ uint16_t Host::vp_hosts_responded_bits = 0;
 uint16_t Host::vp_hosts_is_empty_bits = 0;
 HostState Host::host_state = HostState::FOLLOWER;
 
+void Host::HandleClientData(uint8_t* raw_packet) {
+	auto packet = reinterpret_cast<ClientDataPacket*>(raw_packet);
+	uint32_t data = ntohl(packet->data);
+	uint32_t timestamp = ntohl(packet->timestamp);
+	log.push_back(LogEntry(term, timestamp, data));
+	unique_lock<mutex> event_lock(event_mutex);
+	event_cv.notify_one();
+}
+
+#ifndef RAFT_MODE
 void Host::HandleRequestVote(uint8_t* raw_packet) {
     Timer::Reset();
     auto packet = reinterpret_cast<RequestVotePacket*>(raw_packet);
@@ -87,6 +96,7 @@ void Host::HandleRequestVoteResponse(uint8_t* raw_packet) {
         Network::SendPackets(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, true);
     }
 }
+#endif
 
 void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
     ChangeState(HostState::FOLLOWER);
@@ -132,6 +142,8 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
     AppendEntriesResponsePacket response(term, 1, self_index, sender_log_index);
     Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_president_index);
 
+#ifndef RAFT_MODE
+
     if (vice_president_index == self_index) {
         ChangeState(HostState::VICE_PRESIDENT);
         vp_hosts_bits = sender_vp_hosts_bits;
@@ -148,6 +160,8 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
         }
         Network::SendPackets(original_packet, SMALL_PACKET_SIZE, host_indices);
     }
+
+#endif
 }
 
 void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
@@ -161,10 +175,12 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
         return;
     }
 
+#ifndef RAFT_MODE
     if (CheckState() == HostState::VICE_PRESIDENT) {
         VpHandleAppendEntriesResponse(sender_term, sender_success, sender_index, is_empty, sender_log_index);
         return;
     }
+#endif
 
     if (CheckState() == HostState::PRESIDENT) {
         if (term < sender_term) {
@@ -178,6 +194,7 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
     }
 }
 
+#ifndef RAFT_MODE
 void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
     uint32_t follower_index, bool follower_is_empty, uint32_t follower_log_index) {
     
@@ -198,6 +215,7 @@ void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_s
     }
         
 }
+#endif
 
 void Host::PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index,
     bool is_empty, uint32_t log_entry) {
@@ -214,6 +232,7 @@ void Host::PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t 
     }
 
     // move up commit index, go backwards so that once you hit the new index you can stop
+	auto old_commit_index = commit_index;
     for (auto index = log.size() - 1; index > commit_index; --index) {
         if (log[index].term != term) {
             break;
@@ -229,8 +248,13 @@ void Host::PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t 
             break;
         }
     }
+	if (old_commit_index != commit_index) {
+		CommitToClientPacket packet(commit_index);
+		Network::SendPackets(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, vector<int>(), true);
+	}
 }
 
+#ifndef RAFT_MODE
 void Host::HandleRequestAppendEntries(uint8_t* raw_packet) {
 
     if (CheckState() == HostState::PRESIDENT) {
@@ -244,7 +268,6 @@ void Host::HandleRequestAppendEntries(uint8_t* raw_packet) {
         Network::SendPacket(response.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, sender_index);
     }
 }
-
 
 void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
     auto packet = reinterpret_cast<VpCombinedResponsePacket*>(raw_packet);
@@ -271,10 +294,14 @@ void Host::HandleVpCombinedResponse(uint8_t* raw_packet) {
         }
     }
 }
+#endif
 
 void Host::RoutePacket(uint8_t* packet) {
     auto opcode = ToUint16(packet + 2);
     switch (opcode) {
+	case CLIENT_DATA:
+		HandleClientData(packet);
+		break;
     case REQUEST_VOTE:
         HandleRequestVote(packet);
         break;
@@ -293,12 +320,14 @@ void Host::RoutePacket(uint8_t* packet) {
     case EMPTY_APPEND_ENTRIES_RESPONSE:
         HandleAppendEntriesResponse(packet, true);
         break;
+#ifndef RAFT_MODE
     case REQUEST_APPEND_ENTRIES:
         HandleRequestAppendEntries(packet);
         break;
     case VP_COMBINED_RESPONSE:
         HandleVpCombinedResponse(packet);
         break;
+#endif
     default:
         // ignore packet
         break;
@@ -340,7 +369,11 @@ void Host::PresidentState() {
         // we are going to send a real append entries, so we won't send an empty one
         need_to_send_heartbeat = false;
 
+#ifdef RAFT_MODE
+		bool found_vp = true;
+#else
         bool found_vp = max_group < 3; // if group less than two don't find a vp
+#endif
         for (auto& group : index_map) {
             int vp_index = -1;
             uint16_t vp_host_bits = 0;
@@ -384,6 +417,7 @@ void Host::FollowerState() {
     }
 }
 
+#ifndef RAFT_MODE
 void Host::VicePresidentState() {
     for (int i = 0; i < num_hosts; ++i) {
         if (vp_hosts_responded_vector[i] && vp_hosts_log_index_vector[i] == vp_max_log_index) {
@@ -422,8 +456,6 @@ void Host::VicePresidentState() {
         vp_hosts_responded_vector[i] = false;
         vp_hosts_success_vector[i] = false;
     }
-    
-
 }
-
+#endif
 }

@@ -11,6 +11,9 @@ void Timer::Run() {
             milliseconds(wait_time);
         auto status = timer_cv.wait_for(lock, wait_ms);
         if (status == std::cv_status::timeout) {
+			if (Host::CheckState() == HostState::FOLLOWER) {
+				Host::ChangeState(HostState::CANDIDATE);
+			}
             unique_lock<mutex> event_lock(Host::event_mutex);
             Host::event_cv.notify_one();
         }

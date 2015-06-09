@@ -24,8 +24,6 @@ using std::unique_lock;
 
 namespace obiden {
 
-
-
 struct LogEntry {
     uint32_t term;
     uint32_t timestamp;
@@ -54,7 +52,7 @@ class Host {
     static uint8_t voted_for;
     static Log log;
     // volatile
-    static bool is_raft_mode;
+
     static uint32_t commit_index;
     static uint32_t last_log_index;
     static uint32_t self_index;
@@ -140,6 +138,7 @@ public:
         data[3] = static_cast<uint8_t>((value)& 0xFF);
     }
 
+	static void HandleClientData(uint8_t* raw_packet);
     static void HandleRequestVote(uint8_t* raw_packet);
     static void HandleRequestVoteResponse(uint8_t* raw_packet);
     static void HandleAppendEntries(uint8_t* raw_packet, bool is_empty);

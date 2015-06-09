@@ -9,13 +9,15 @@
 #include <cstdio>
 #include <cstdint>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <thread>
+#include <ctime>
 
 #include "networking.h"
 #include "packets.h"
 
-using namespace std;
+//using namespace std;
 using namespace obiden;
 
 // CLIENT ONLY
@@ -45,17 +47,6 @@ void SendPacketInThread(uint8_t *payload, int payload_size)
 	sendto(sk, packet, payload_size, 0, reinterpret_cast<sockaddr*>(&remote), sizeof(remote));
 
 	delete[] packet;
-}
-
-void SendPackets(uint8_t *payload, int payload_size, const vector<int>& indices, bool to_client)
-{
-	for (auto index : indices)
-	{
-		auto host_thread = thread(SendPacketInThread, payload, payload_size, host_info_vector[index]);
-	}
-	if (to_client) {
-		auto client_thread = thread(SendPacketInThread, payload, payload_size, client_info);
-	}
 }
 
 void createListener(int portnum, vector<HostInfo> host_info_in)
@@ -110,12 +101,15 @@ void createListener(int portnum, vector<HostInfo> host_info_in)
 		}
 		else if (opcode == Opcode::COMMIT_TO_CLIENT) {
 			++data;
-            time_t timestamp;
-            struct tm* tm_info = localtime(&timestamp);
+			time_t timestamp;
+			struct tm* tm_info = localtime(&timestamp);
 
+			ClientDataPacket data_packet(data, uint32_t(timestamp));
+
+			char buffer[64];
             strftime(buffer, 25, "%H:%M:%S", tm_info);
-            cout "time: " << buffer << " go back to listen\n";
-			sendPacketInThread(packet, LARGE_PACKET_SIZE, host_info_vector[presidentIndex]);
+            std::cout << "time: " << buffer << " go back to listen\n";
+			SendPacketInThread(data_packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE);
         }
 		
     }
@@ -133,11 +127,11 @@ void createListener(int portnum, vector<HostInfo> host_info_in)
 // Rather than make the hosts keep track of performance the client can just record the timestamp of each commit message received from the president.
 // Dump to standard out.
 
-int main(int argc, char* argv)
+int main(int argc, char* argv[])
 {
     vector<HostInfo> hostinfo_vector;
     HostInfo hostinfo;
-    auto input = ifstream(argv[1]);
+    auto input = std::ifstream(argv[1]);
     string ip;
     while (std::getline(input, ip)) {
         int port_start = ip.find(':');
@@ -149,7 +143,7 @@ int main(int argc, char* argv)
     auto client_host = hostinfo_vector.back();
     hostinfo_vector.pop_back();
 
-    auto listener_thread = thread(createListener, hostinfo_vector[self_index].port);
+    auto listener_thread = std::thread(createListener, hostinfo_vector[hostinfo_vector.size() - 1].port, hostinfo_vector);
 
     return 0;
 }

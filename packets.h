@@ -32,14 +32,14 @@ struct ClientDataPacket {
     uint16_t opcode;
     uint32_t data;
     uint32_t timestamp;
-    uint32_t leftover[3];
+    uint32_t leftover[2];
 	ClientDataPacket(uint32_t data, uint32_t timestamp) : size(SMALL_PACKET_SIZE),
 		opcode(CLIENT_DATA), data(data), timestamp(timestamp) { }
 	ClientDataPacket& ToNetworkOrder() {
 		size = htons(size);
 		opcode = htons(opcode);
-		data = htons(data);
-		timestamp = htons(timestamp);
+		data = htonl(data);
+		timestamp = htonl(timestamp);
 		return *this;
 	}
 	uint8_t* ToBytes() {
@@ -52,7 +52,17 @@ struct CommitToClientPacket {
 	uint16_t opcode;
 	uint32_t index;
 	uint32_t leftover[4];
-
+	CommitToClientPacket(uint32_t index) : size(SMALL_PACKET_SIZE), opcode(Opcode::COMMIT_TO_CLIENT),
+		index(index) { }
+	CommitToClientPacket& ToNetworkOrder() {
+		size = htons(size);
+		opcode = htons(opcode);
+		index = htons(index);
+		return *this;
+	}
+	uint8_t* ToBytes() {
+		return reinterpret_cast<uint8_t*>(this);
+	}
 };
 
 struct RequestVotePacket {
