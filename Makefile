@@ -10,4 +10,4 @@ client: client.cpp packets.h networking.h host.h
 	g++ -std=c++11 -Wall -o client client.cpp -lpthread
 
 clean:
-	rm -f *.o *~ obiden
+	rm -f *.o *~ obiden client raft
