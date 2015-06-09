@@ -1,8 +1,10 @@
-#pragma once
 #include "networking.h"
 #include <iostream>
 #include <thread>
 #include "host.h"
+#include <sys/socket.h>
+#include <memory.h>
+#include <netdb.h>
 
 using std::thread;
 
@@ -24,11 +26,15 @@ namespace obiden {
  *
  */
 
+
+ vector<HostInfo> Network::host_info_vector;
+ HostInfo Network::client_info;
+
 void Network::CreateListener(int portnum)
-{   
+{
     int sk = 0;
     struct sockaddr_in local;
-    int len = sizeof(local);
+    socklen_t len = sizeof(local);
 
     // Create listener socket and process packets here
     if((sk = socket(AF_INET, SOCK_DGRAM, 0)) < 0){
@@ -48,7 +54,7 @@ void Network::CreateListener(int portnum)
 
     int messageLength = 0;
     struct sockaddr_in remote;
-    int rlen = sizeof(remote);
+    socklen_t rlen = sizeof(remote);
 
     if(getsockname(sk,(struct sockaddr*)&local,&len) < 0){
         perror("getsockname call");
@@ -106,4 +112,3 @@ void Network::SendPacketInThread(uint8_t *payload, int payload_size, HostInfo ho
 }
 
 }
-

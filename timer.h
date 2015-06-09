@@ -20,8 +20,7 @@ namespace obiden {
 
 class Timer {
 public:
-    static mutex timer_mutex;
-    static condition_variable timer_cv;
+
 
     enum WaitTime {
         ELECTION_RANDOM = -1,
@@ -32,6 +31,8 @@ public:
     static WaitTime wait_time;
     static system_clock::duration vp_start_time;
     static system_clock::duration vp_elapsed_time;
+    static mutex timer_mutex;
+    static condition_variable timer_cv;
 
     static void Run();
     static void Reset();

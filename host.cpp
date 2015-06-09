@@ -1,9 +1,9 @@
-#pragma once
-
 #include <cstdint>
 #include <vector>
 #include <map>
 #include <thread>
+#include <memory.h>
+#include <iostream>
 #include <memory>
 #include <random>
 #include <chrono>
@@ -38,6 +38,18 @@ uint16_t Host::vp_hosts_success_bits = 0;
 uint16_t Host::vp_hosts_responded_bits = 0;
 uint16_t Host::vp_hosts_is_empty_bits = 0;
 HostState Host::host_state = HostState::FOLLOWER;
+mutex Host::event_mutex;
+condition_variable Host::event_cv;
+vector<int> Host::others_indices;
+vector<uint32_t> Host::vp_hosts_log_index_vector;
+uint32_t Host::vp_max_log_index;
+vector<bool> Host::vp_hosts_isempty_vector;
+vector<bool> Host::vp_hosts_success_vector;
+vector<bool> Host::vp_hosts_responded_vector;
+bool Host::append_entry_request_sent;
+
+
+Log Host::log;
 
 void Host::HandleClientData(uint8_t* raw_packet) {
 	auto packet = reinterpret_cast<ClientDataPacket*>(raw_packet);
@@ -48,7 +60,6 @@ void Host::HandleClientData(uint8_t* raw_packet) {
 	event_cv.notify_one();
 }
 
-#ifndef RAFT_MODE
 void Host::HandleRequestVote(uint8_t* raw_packet) {
     Timer::Reset();
     auto packet = reinterpret_cast<RequestVotePacket*>(raw_packet);
@@ -96,7 +107,6 @@ void Host::HandleRequestVoteResponse(uint8_t* raw_packet) {
         Network::SendPackets(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, true);
     }
 }
-#endif
 
 void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
     ChangeState(HostState::FOLLOWER);
@@ -104,7 +114,7 @@ void Host::HandleAppendEntries(uint8_t* raw_packet, bool is_empty) {
     uint8_t  sender_vp_index = packet->header.vp_index;
     static uint8_t original_packet[LARGE_PACKET_SIZE];
     if (sender_vp_index == self_index) {
-        memcpy_s(original_packet, LARGE_PACKET_SIZE, raw_packet, is_empty ? SMALL_PACKET_SIZE : LARGE_PACKET_SIZE);
+        memcpy(original_packet, raw_packet, is_empty ? SMALL_PACKET_SIZE : LARGE_PACKET_SIZE);
     }
 
     uint32_t sender_term = ntohl(packet->header.term);
@@ -197,7 +207,7 @@ void Host::HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty) {
 #ifndef RAFT_MODE
 void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
     uint32_t follower_index, bool follower_is_empty, uint32_t follower_log_index) {
-    
+
     if (follower_term > vp_hosts_max_term) {
         vp_hosts_max_term = follower_term;
     }
@@ -213,7 +223,7 @@ void Host::VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_s
         auto lock = unique_lock<mutex>(event_mutex);
         event_cv.notify_one();
     }
-        
+
 }
 #endif
 
@@ -340,7 +350,7 @@ void Host::PresidentState() {
     // Take the largest group and if it has at least three members, choose a member and make it the
     // vice president, send an append entries with his index as vp_index. Then send to all the other
     // groups one at a time.
-    
+
     auto log_size = log.size();
     bool need_to_send_heartbeat = true;
     while (CheckState() == HostState::PRESIDENT) {
@@ -389,28 +399,31 @@ void Host::PresidentState() {
         }
     }
 
-    EmptyAppendEntriesPacket packet(term, log_size - 1, log[log_size - 1].term,
-        commit_index, self_index, -1, 0);
-    Network::SendPackets(packet.ToNetworkOrder().ToBytes(), LARGE_PACKET_SIZE, others_indices, false);
-
+    if (need_to_send_heartbeat) {
+        EmptyAppendEntriesPacket packet(term, log_size - 1, log[log_size - 1].term,
+            commit_index, self_index, -1, 0);
+        Network::SendPackets(packet.ToNetworkOrder().ToBytes(), LARGE_PACKET_SIZE, others_indices, false);
+    }
 }
 
 void Host::CandidateState() {
-
+	std::cout << "in candidate state" << std::endl;
     ++term;
     voted_for = self_index;
     votes_received = 1;
     RequestVotePacket request_vote(term, self_index, last_log_index, log[last_log_index].term);
-
+	std::cout << "after request vote" << std::endl;
     Network::SendPackets(request_vote.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, others_indices, false);
 
 }
 
 void Host::FollowerState() {
     if (append_entry_request_sent) {
+		std::cout << "In Follower State" << std::endl;
         ChangeState(HostState::CANDIDATE);
     }
     else {
+		std::cout << "In Follower State" << std::endl;
         append_entry_request_sent = true;
         RequestAppendEntriesPacket packet(self_index);
         Network::SendPacket(packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE, president_index);

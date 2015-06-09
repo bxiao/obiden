@@ -28,7 +28,7 @@ struct LogEntry {
     uint32_t term;
     uint32_t timestamp;
     uint32_t data;
-    LogEntry(uint32_t term = 0, uint32_t timestamp = 0, uint32_t data = 0): term(term), 
+    LogEntry(uint32_t term = 0, uint32_t timestamp = 0, uint32_t data = 0): term(term),
         timestamp(timestamp), data(data) { }
     LogEntry& ToNetworkOrder() {
         term = htonl(term);
@@ -145,7 +145,7 @@ public:
     static void HandleAppendEntriesResponse(uint8_t* raw_packet, bool is_empty);
     static void VpHandleAppendEntriesResponse(uint32_t follower_term, bool follower_success,
 		uint32_t follower_index, bool follower_is_empty, uint32_t follower_log_index);
-    static void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index, 
+    static void PresidentHandleAppendEntriesResponse(bool follower_success, uint32_t follower_index,
 		bool is_empty, uint32_t log_entry);
     static void HandleRequestAppendEntries(uint8_t* raw_packet);
     static void HandleVpCombinedResponse(uint8_t* raw_packet);

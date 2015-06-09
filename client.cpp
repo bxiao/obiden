@@ -1,5 +1,3 @@
-#pragma once
-
 #ifdef WIN32
 #include <Winsock2.h>
 #else
@@ -13,6 +11,9 @@
 #include <vector>
 #include <thread>
 #include <ctime>
+#include <sys/socket.h>
+#include <memory.h>
+#include <netdb.h>
 
 #include "networking.h"
 #include "packets.h"
@@ -53,7 +54,7 @@ void createListener(int portnum, vector<HostInfo> host_info_in)
 {
     int sk = 0;
     struct sockaddr_in local;
-    int len = sizeof(local);
+    socklen_t len = sizeof(local);
 
 	host_info_vector = host_info_in;
 
@@ -75,7 +76,7 @@ void createListener(int portnum, vector<HostInfo> host_info_in)
 
     int messageLength = 0;
     struct sockaddr_in remote;
-    int rlen = sizeof(remote);
+    socklen_t rlen = sizeof(remote);
 
     if(getsockname(sk,(struct sockaddr*)&local,&len) < 0){
         perror("getsockname call");
@@ -89,7 +90,7 @@ void createListener(int portnum, vector<HostInfo> host_info_in)
     while (true) {
         // Wait for packets, and parse them as they come in
         // Can be 24 bytes or 1024, messageLength will be the determinant of what packet type it is
-        
+
         messageLength = recvfrom(sk, reinterpret_cast<char*>(packet), SMALL_PACKET_SIZE, 0,
             (struct sockaddr*) &remote, &rlen);
         std::cout << "mesglen: " << messageLength << "\npayload: " << packet << '\n';
@@ -111,7 +112,7 @@ void createListener(int portnum, vector<HostInfo> host_info_in)
             std::cout << "time: " << buffer << " go back to listen\n";
 			SendPacketInThread(data_packet.ToNetworkOrder().ToBytes(), SMALL_PACKET_SIZE);
         }
-		
+
     }
 }
 
@@ -131,7 +132,7 @@ int main(int argc, char* argv[])
 {
     vector<HostInfo> hostinfo_vector;
     HostInfo hostinfo;
-    auto input = std::ifstream(argv[1]);
+    std::ifstream input(argv[1]);
     string ip;
     while (std::getline(input, ip)) {
         int port_start = ip.find(':');
